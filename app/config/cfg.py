@@ -248,6 +248,9 @@ class Config(QConfig):
         "GeneralDownload", "NameConflict", "keepBoth", OptionsValidator(["keepBoth", "overwrite", "ask"])
     )
     shouldRemoveMissingTasks = ConfigItem("GeneralDownload", "RemoveMissingTasks", False, BoolValidator())
+    shouldShowProgressDialog = ConfigItem(
+        "GeneralDownload", "ShowProgressDialog", True, BoolValidator()
+    )
     shouldShowCompletionDialog = ConfigItem(
         "GeneralDownload", "ShowCompletionDialog", False, BoolValidator()
     )
