@@ -55,6 +55,7 @@ def startApp(application, primaryInstance, isSilent=False):
     from PySide6.QtGui import QIcon
     from app.config.cfg import cfg
     from app.view.dialogs.name_conflict import NameConflictPrompt
+    from app.view.dialogs.task_completed import TaskCompletedPrompt
     from app.view.shell.clipboard_listener import ClipboardListener
     from app.signal_bus import signalBus
     from app.services.port_listener import ListenStatus
@@ -112,6 +113,7 @@ def startApp(application, primaryInstance, isSilent=False):
     application.clipboardListener.setEnabled(cfg.isClipboardListenerEnabled.value)
 
     application.nameConflictPrompt = NameConflictPrompt(engine.nameConflictQueue)
+    application.taskCompletedPrompt = TaskCompletedPrompt(taskService)
 
     from app.platform.windows import emptyWorkingSet
 
