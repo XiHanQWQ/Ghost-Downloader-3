@@ -12,7 +12,6 @@ on:
           - 'windows'
           - 'macos'
           - 'linux'
-          - 'android'
           - 'all'
       create_release:
         description: 'Create Release'
@@ -60,8 +59,6 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/test.yml
-    secrets:
-      ANDROID_REPO_TOKEN: ${{ secrets.ANDROID_REPO_TOKEN }}
 
   prepare:
     needs: [test]
@@ -776,235 +773,8 @@ jobs:
             dist/Ghost-Downloader-v${{ env.VERSION }}-Linux-${{ matrix.architecture }}.deb
             dist/Ghost-Downloader-v${{ env.VERSION }}-Linux-${{ matrix.architecture }}.AppImage
 
-  android-libtorrent:
-    if: ${{ github.event.inputs.build_target == 'android' || github.event.inputs.build_target == 'all' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/checkout@v7
-        with:
-          repository: XiaoYouChR/Ghost-Downloader-Android
-          token: ${{ secrets.ANDROID_REPO_TOKEN }}
-          path: android
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.14'
-
-      - name: Resolve libtorrent wheel versions
-        id: libtorrent
-        working-directory: android/build-scripts
-        run: echo "versions=$(./build_libtorrent_wheel.sh --print-versions)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache libtorrent wheel
-        id: libtorrent-cache
-        uses: actions/cache@v6
-        with:
-          path: android/build-scripts/dist
-          key: libtorrent-android-arm64-v8a-${{ steps.libtorrent.outputs.versions }}-${{ hashFiles('android/build-scripts/build_libtorrent_wheel.sh') }}
-
-      - name: Install wheel tool
-        if: ${{ steps.libtorrent-cache.outputs.cache-hit != 'true' }}
-        run: pip install wheel
-
-      - name: Build libtorrent wheel
-        if: ${{ steps.libtorrent-cache.outputs.cache-hit != 'true' }}
-        working-directory: android/build-scripts
-        run: ./build_libtorrent_wheel.sh --abi=arm64-v8a
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: libtorrent-arm64-v8a
-          path: android/build-scripts/dist/libtorrent-*.whl
-
-  android-wreq:
-    if: ${{ github.event.inputs.build_target == 'android' || github.event.inputs.build_target == 'all' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/checkout@v7
-        with:
-          repository: XiaoYouChR/Ghost-Downloader-Android
-          token: ${{ secrets.ANDROID_REPO_TOKEN }}
-          path: android
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.14'
-
-      - name: Install tools
-        run: pip install lief wheel
-
-      - name: Patch wreq wheel
-        working-directory: android/build-scripts
-        run: ./patch_wreq_wheel.sh --abi=arm64-v8a
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: wreq-arm64-v8a
-          path: android/build-scripts/dist/wreq-*.whl
-
-  android-kelpie:
-    if: ${{ github.event.inputs.build_target == 'android' || github.event.inputs.build_target == 'all' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/checkout@v7
-        with:
-          repository: XiaoYouChR/Ghost-Downloader-Android
-          token: ${{ secrets.ANDROID_REPO_TOKEN }}
-          path: android
-
-      - uses: actions/checkout@v7
-        with:
-          repository: XiaoYouChR/Kelpie
-          path: Kelpie
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: Kelpie/go.mod
-
-      - name: Build Kelpie
-        working-directory: android/build-scripts
-        env:
-          KELPIE_SRC: ${{ github.workspace }}/Kelpie
-        run: ./build_kelpie.sh
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: kelpie-arm64-v8a
-          path: android/app/src/main/jniLibs/arm64-v8a/libkelpie.so
-
-  android-native-libs:
-    if: ${{ github.event.inputs.build_target == 'android' || github.event.inputs.build_target == 'all' }}
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/checkout@v7
-        with:
-          repository: XiaoYouChR/Ghost-Downloader-Android
-          token: ${{ secrets.ANDROID_REPO_TOKEN }}
-          path: android
-
-      - name: Fetch pre-built binaries
-        working-directory: android/build-scripts
-        run: ./fetch_android_libs.sh
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: native-libs-arm64-v8a
-          path: android/app/src/main/jniLibs/arm64-v8a
-
-  build-android:
-    needs: [prepare, android-libtorrent, android-wreq, android-kelpie, android-native-libs]
-    if: ${{ github.event.inputs.build_target == 'android' || github.event.inputs.build_target == 'all' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    env:
-      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && 'true' || 'false' }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - uses: actions/checkout@v7
-        with:
-          repository: XiaoYouChR/Ghost-Downloader-Android
-          token: ${{ secrets.ANDROID_REPO_TOKEN }}
-          path: android
-
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc \
-            /usr/local/share/boost /usr/local/share/powershell /opt/hostedtoolcache/CodeQL \
-            "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}" || true
-          sudo docker image prune -af || true
-          df -h /
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: libtorrent-arm64-v8a
-          path: android/build-scripts/dist
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: wreq-arm64-v8a
-          path: android/build-scripts/dist
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: kelpie-arm64-v8a
-          path: android/app/src/main/jniLibs/arm64-v8a
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: native-libs-arm64-v8a
-          path: android/app/src/main/jniLibs/arm64-v8a
-
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.14'
-
-      - uses: gradle/actions/setup-gradle@v6
-
-      - name: Write keystore.properties
-        if: ${{ env.HAS_KEYSTORE == 'true' }}
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-        run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          cat > android/keystore.properties <<EOF
-          storeFile=$RUNNER_TEMP/release.jks
-          storePassword=$ANDROID_KEYSTORE_PASSWORD
-          keyAlias=$ANDROID_KEY_ALIAS
-          keyPassword=$ANDROID_KEYSTORE_PASSWORD
-          EOF
-
-      - name: Build APK
-        working-directory: android
-        run: |
-          if [ "$HAS_KEYSTORE" = 'true' ]; then
-            echo "APK_VARIANT=release" >> "$GITHUB_ENV"
-            ./gradlew :app:assembleRelease
-          else
-            echo "APK_VARIANT=debug" >> "$GITHUB_ENV"
-            ./gradlew :app:assembleDebug
-          fi
-
-      - name: Rename APK
-        run: |
-          APK=$(ls android/app/build/outputs/apk/"$APK_VARIANT"/*.apk)
-          DEST="Ghost-Downloader-v${{ needs.prepare.outputs.version }}-Android-arm64-v8a.apk"
-          mv "$APK" "$DEST"
-          echo "APK_FILE=$DEST" >> "$GITHUB_ENV"
-
-      - name: Upload to release
-        if: ${{ github.event.inputs.create_release == 'true' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release upload "v${{ needs.prepare.outputs.version }}" "${{ env.APK_FILE }}" --clobber
-
-      - name: Upload APK artifact
-        if: ${{ github.event.inputs.create_release == 'false' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: Ghost-Downloader-v${{ needs.prepare.outputs.version }}-Android-arm64-v8a
-          path: ${{ env.APK_FILE }}
-          if-no-files-found: error
-
   finalize:
-    needs: [prepare, build-windows, build-macos, build-ubuntu, build-android]
+    needs: [prepare, build-windows, build-macos, build-ubuntu]
     if: ${{ always() && github.event.inputs.create_release == 'true' && needs.build-windows.result == 'success' && needs.build-macos.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
@@ -1028,7 +798,7 @@ jobs:
           PREV_VER: ${{ needs.prepare.outputs.patch_base }}
         run: |
           mkdir -p assets
-          gh release download "v${VERSION}" --repo ${{ github.repository }} -p "*.hdiff" -p "*.zip" -p "*.dmg" -p "*.tar.xz" -p "*.deb" -p "*.AppImage" -p "*.apk" -p "*.exe" -D assets/ 2>/dev/null || true
+          gh release download "v${VERSION}" --repo ${{ github.repository }} -p "*.hdiff" -p "*.zip" -p "*.dmg" -p "*.tar.xz" -p "*.deb" -p "*.AppImage" -p "*.exe" -D assets/ 2>/dev/null || true
 
           uv run --no-project python3 << 'PYEOF'
           import hashlib, json, os
@@ -1180,4 +950,3 @@ jobs:
             cat failed.txt
             exit 1
           fi
-
